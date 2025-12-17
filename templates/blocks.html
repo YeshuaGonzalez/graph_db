@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Consultas Cypher</title>
+    <style>
+        /*BLOQUES*/
+        .block {
+            cursor: grab;
+            position: absolute;
+            z-index: 10;
+            padding: 1rem;
+            border: 1px solid #ccc;
+            user-select: none;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .block:active {
+            cursor: grabbing;/*mano arrastre*/
+        }
+        .block.selected {
+            border: 2px solid #3b82f6;
+        }
+        .connector-point {
+            width: 10px;
+            height: 10px;
+            background-color: #000;
+            border-radius: 50%;
+            position: absolute;
+            z-index: 20;
+            cursor: crosshair;
+        }
+        .input-point {
+            left: -5px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .output-point {
+            right: -5px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        #workspace-container {
+            min-height: 500px;
+            background-color: #f0f0f0;
+            border: 2px solid #000;
+            position: relative;
+            overflow: hidden;
+            cursor: grab;
+        }
+        #workspace-container:active {
+            cursor: grabbing;
+        }
+        #workspace {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+            transition: transform 0.1s;
+        }
+        svg.connections-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            pointer-events: none;
+        }
+        .connection-line {
+            stroke: #3b82f6;
+            stroke-width: 4;
+            pointer-events: all;
+            cursor: pointer;
+            transition: stroke 0.2s, stroke-width 0.2s;
+        }
+        .connection-line:hover {
+            stroke-width: 5;
+        }
+        .connection-line.selected {
+            stroke: #ef4444;
+            stroke-width: 5;
+        }
+        #cypher-output {
+            background-color: #333;
+            color: #fff;
+            padding: 1rem;
+            min-height: 100px;
+        }
+        .delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: red;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            cursor: pointer;
+            z-index: 30;
+        }
+    </style>
+</head>
+<body>
+    <div style="padding: 1rem;">
+        <h1 style="text-align: center;">Generador de Consultas Cypher</h1>
+        <div style="display: flex; gap: 1rem;">
+            <!-- Paleta de bloques -->
+            <div style="flex: 1;">
+                <h2>Bloques</h2>
+                <div id="palette" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="add-block-btn" data-type="match" style="background-color: #667eea; color: white; padding: 0.5rem; border: none; cursor: pointer;">
+                        Bloque MATCH
+                    </button>
+                    <button class="add-block-btn" data-type="where" style="background-color: #f6ad55; color: white; padding: 0.5rem; border: none; cursor: pointer;">
+                        Bloque WHERE
+                    </button>
+                    <button class="add-block-btn" data-type="return" style="background-color: #48bb78; color: white; padding: 0.5rem; border: none; cursor: pointer;">
+                        Bloque RETURN
+                    </button>
+                    <button class="add-block-btn" data-type="test_node" style="background-color: #3c44a9; color: white; padding: 0.5rem; border: none; cursor: pointer;">
+                        Nodo (Test)
+                    </button>
+                </div>
+            </div>
+            <!-- Área de trabajo y visor de código -->
+            <div style="flex: 3;">
+                <div id="workspace-container">
+                    <div id="workspace">
+                        <svg class="connections-svg" id="connections-svg"></svg>
+                        <div id="workspace-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #aaa; text-align: center;">
+                            Empieza por agregar algún bloque.
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h2>Código Cypher Generado</h2>
+                    <pre id="cypher-output"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de edición -->
+    <div id="edit-modal" style="position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.75); display: none; align-items: center; justify-content: center;">
+        <div style="background-color: white; padding: 1.5rem; border-radius: 8px;">
+            <h3>Editar Bloque</h3>
+            <div id="modal-content"></div>
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+                <button id="close-modal" style="cursor: pointer;">
+                    Cerrar
+                </button>
+                <button id="save-block" style="background-color: #667eea; color: white; padding: 0.5rem; border: none; cursor: pointer;">
+                    Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const workspaceContainer = document.getElementById('workspace-container');
+            const workspace = document.getElementById('workspace');
+            const cypherOutput = document.getElementById('cypher-output');
+            const connectionsSvg = document.getElementById('connections-svg');
+            const workspaceOverlay = document.getElementById('workspace-overlay');
+            const editModal = document.getElementById('edit-modal');
+            const modalContent = document.getElementById('modal-content');
+            const closeModalBtn = document.getElementById('close-modal');
+            const saveBlockBtn = document.getElementById('save-block');
+            
+            let blocks = [];
+            let connections = [];
+            let isDraggingBlock = false;
+            let activeBlock = null;
+            let isConnecting = false;
+            let connectingFromId = null;
+            let tempLine = null;
+            let selectedElement = null;
+            
+            let blockIdCounter = 0;
+            
+            const BLOCK_SIZE = { width: 180, height: 60 };
+
+            // Variables para el zoom y la panorámica
+            let zoomLevel = 1;
+            const MIN_ZOOM = 0.5;
+            const MAX_ZOOM = 2;
+            let isPanning = false;
+            let panStart = { x: 0, y: 0 };
+            let workspaceOffset = { x: 0, y: 0 };
+
+            // Ocultar el overlay si hay bloques
+            const updateOverlay = () => {
+                if (blocks.length > 0) {
+                    workspaceOverlay.style.display = 'none';
+                } else {
+                    workspaceOverlay.style.display = 'block';
+                }
+            };
+            
+            // Función para deseleccionar todos los elementos
+            const deselectAll = () => {
+                if (selectedElement) {
+                    selectedElement.classList.remove('selected');
+                    selectedElement = null;
+                }
+            };
+
+            // Generar el código Cypher
+            const generateCypher = () => {
+                let cypherString = '';
+                
+                // Encontrar el bloque de inicio (el que no tiene conexiones de entrada)
+                let startBlock = blocks.find(b => !connections.some(c => c.toId === b.id));
+                if (startBlock && startBlock.type !== 'match') {
+                    // Si el primer bloque no es MATCH, no es una consulta válida en este caso
+                    cypherString = '// La consulta debe comenzar con un bloque MATCH.';
+                    cypherOutput.textContent = cypherString;
+                    return;
+                }
+
+                if (startBlock) {
+                    let currentBlock = startBlock;
+                    while (currentBlock) {
+                        switch (currentBlock.type) {
+                            case 'match':
+                                const matchNode = `(${currentBlock.props.name || ''}:${currentBlock.props.label || ''})`;
+                                cypherString += `MATCH ${matchNode} `;
+                                break;
+                            case 'where':
+                                if (!cypherString.includes('WHERE')) {
+                                    cypherString += `WHERE ${currentBlock.props.property} = '${currentBlock.props.value}' `;
+                                } else {
+                                    cypherString += `AND ${currentBlock.props.property} = '${currentBlock.props.value}' `;
+                                }
+                                break;
+                            case 'return':
+                                cypherString += `RETURN ${currentBlock.props.properties || '*'}`;
+                                break;
+                        }
+
+                        // Encontrar la siguiente conexión
+                        const nextConnection = connections.find(c => c.fromId === currentBlock.id);
+                        if (nextConnection) {
+                            currentBlock = blocks.find(b => b.id === nextConnection.toId);
+                        } else {
+                            currentBlock = null; // No hay más bloques conectados
+                        }
+                    }
+                } else {
+                    cypherString = '// Construye tu consulta arrastrando bloques.';
+                }
+
+                cypherOutput.textContent = cypherString.trim();
+            };
+
+            // Dibujar las conexiones
+            const drawConnections = () => {
+                connectionsSvg.innerHTML = '';
+                connections.forEach(conn => {
+                    const fromBlock = blocks.find(b => b.id === conn.fromId);
+                    const toBlock = blocks.find(b => b.id === conn.toId);
+
+                    if (fromBlock && toBlock) {
+                        const x1 = fromBlock.x + BLOCK_SIZE.width;
+                        const y1 = fromBlock.y + BLOCK_SIZE.height / 2;
+                        const x2 = toBlock.x;
+                        const y2 = toBlock.y + BLOCK_SIZE.height / 2;
+
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', x1);
+                        line.setAttribute('y1', y1);
+                        line.setAttribute('x2', x2);
+                        line.setAttribute('y2', y2);
+                        line.classList.add('connection-line');
+                        // Usar data attributes para identificar la conexión
+                        line.dataset.from = conn.fromId;
+                        line.dataset.to = conn.toId;
+                        connectionsSvg.appendChild(line);
+                    }
+                });
+            };
+
+            // Crear y agregar un nuevo bloque
+            const createBlockElement = (type, x, y, props) => {
+                const newBlock = { id: blockIdCounter++, type, x, y, props };
+                blocks.push(newBlock);
+
+                const blockElement = document.createElement('div');
+                blockElement.className = `block ${type}-block`;
+                blockElement.dataset.id = newBlock.id;
+                blockElement.style.left = `${x}px`;
+                blockElement.style.top = `${y}px`;
+                blockElement.style.width = `${BLOCK_SIZE.width}px`;
+                blockElement.style.height = `${BLOCK_SIZE.height}px`;
+
+                let contentHtml = '';
+                switch (type) {
+                    case 'match':
+                        contentHtml = `MATCH <br> (${newBlock.props.name}:${newBlock.props.label})`;
+                        blockElement.style.backgroundColor = '#667eea';
+                        blockElement.style.color = 'white';
+                        break;
+                    case 'where':
+                        contentHtml = `WHERE <br> ${newBlock.props.property} = '${newBlock.props.value}'`;
+                        blockElement.style.backgroundColor = '#f6ad55';
+                        blockElement.style.color = 'white';
+                        break;
+                    case 'return':
+                        contentHtml = `RETURN <br> ${newBlock.props.properties}`;
+                        blockElement.style.backgroundColor = '#48bb78';
+                        blockElement.style.color = 'white';
+                        break;
+                    case 'test_node':
+                        contentHtml = `n${blockIdCounter}:Test <br> ${newBlock.props.properties}`;
+                        blockElement.style.backgroundColor = '#3c44a9';
+                        blockElement.style.color = 'white';
+                        break;
+                }
+
+                blockElement.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; text-align: center;">${contentHtml}</div>`;
+                
+                // Puntos de conexión
+                const outputPoint = document.createElement('div');
+                outputPoint.className = 'connector-point output-point';
+                outputPoint.dataset.id = newBlock.id;
+                outputPoint.dataset.direction = 'output';
+                blockElement.appendChild(outputPoint);
+
+                const inputPoint = document.createElement('div');
+                inputPoint.className = 'connector-point input-point';
+                inputPoint.dataset.id = newBlock.id;
+                inputPoint.dataset.direction = 'input';
+                blockElement.appendChild(inputPoint);
+                
+                // Botón de eliminar
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = 'X';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Evitar que el clic active el arrastre del bloque
+                    const blockIdToDelete = parseInt(blockElement.dataset.id);
+                    
+                    // Eliminar el elemento HTML del bloque
+                    blockElement.remove();
+                    
+                    // Eliminar el bloque de la lista de bloques
+                    blocks = blocks.filter(b => b.id !== blockIdToDelete);
+
+                    // Eliminar las conexiones asociadas a este bloque
+                    connections = connections.filter(c => c.fromId !== blockIdToDelete && c.toId !== blockIdToDelete);
+
+                    // Re-dibujar y regenerar
+                    drawConnections();
+                    generateCypher();
+                    updateOverlay();
+                });
+                blockElement.appendChild(deleteBtn);
+
+                newBlock.element = blockElement;
+                workspace.appendChild(blockElement);
+
+                updateOverlay();
+                generateCypher();
+                return blockElement;
+            };
+
+            // Abrir el modal de edición
+            const openModal = (block) => {
+                activeBlock = block;
+                modalContent.innerHTML = '';
+                
+                let html = '';
+                switch (block.type) {
+                    case 'match':
+                        html = `
+                            <div style="margin-bottom: 1rem;">
+                                <label for="nodeName" style="display: block;">Nombre del nodo</label>
+                                <input type="text" id="nodeName" value="${block.props.name}" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc;">
+                            </div>
+                            <div style="margin-bottom: 1rem;">
+                                <label for="nodeLabel" style="display: block;">Etiqueta (label)</label>
+                                <input type="text" id="nodeLabel" value="${block.props.label}" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc;">
+                            </div>
+                        `;
+                        break;
+                    case 'where':
+                        html = `
+                            <div style="margin-bottom: 1rem;">
+                                <label for="propName" style="display: block;">Propiedad</label>
+                                <input type="text" id="propName" value="${block.props.property}" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc;">
+                            </div>
+                            <div style="margin-bottom: 1rem;">
+                                <label for="propValue" style="display: block;">Valor</label>
+                                <input type="text" id="propValue" value="${block.props.value}" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc;">
+                            </div>
+                        `;
+                        break;
+                    case 'return':
+                        html = `
+                            <div style="margin-bottom: 1rem;">
+                                <label for="returnProps" style="display: block;">Propiedades a devolver (separadas por comas)</label>
+                                <input type="text" id="returnProps" value="${block.props.properties}" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc;">
+                            </div>
+                        `;
+                        break;
+                    case 'test_node':
+                        html = `
+                            <div style="margin-bottom: 1rem;">
+                                <label for="returnProps" style="display: block;">Propiedades a devolver (separadas por comas)</label>
+                                <input type="text" id="returnProps" value="${block.props.properties}" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc;">
+                            </div>
+                        `;
+                        break;
+                }
+                modalContent.innerHTML = html;
+                editModal.style.display = 'flex';
+            };
+
+            // Evento para arrastrar y soltar bloques de la paleta
+            document.querySelectorAll('.add-block-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const blockType = e.target.dataset.type;
+                    let defaultProps = {};
+                    switch (blockType) {
+                        case 'match':
+                            defaultProps = { name: 'n', label: 'Node' };
+                            break;
+                        case 'where':
+                            defaultProps = { property: 'name', value: 'John' };
+                            break;
+                        case 'return':
+                            defaultProps = { properties: '*' };
+                            break;
+                        case 'test_node':
+                            defaultProps = { cliente: '' };
+                            break;
+                    }
+                    const newBlockElement = createBlockElement(blockType, 20, 20, defaultProps);
+                    // Open modal immediately to edit properties
+                    openModal(blocks.find(b => b.element === newBlockElement));
+                });
+            });
+
+            // Eventos para arrastrar bloques en el espacio de trabajo
+            workspaceContainer.addEventListener('mousedown', (e) => {
+                // Previene cualquier interacción si el modal está abierto
+                if (editModal.style.display === 'flex') return;
+
+                const blockElement = e.target.closest('.block');
+                const connectorPoint = e.target.closest('.connector-point');
+                
+                deselectAll();
+
+                if (connectorPoint) {
+                    isConnecting = true;
+                    connectingFromId = parseInt(connectorPoint.dataset.id);
+                    
+                    const rect = connectorPoint.getBoundingClientRect();
+                    const containerRect = workspaceContainer.getBoundingClientRect();
+                    const startX = (rect.left + rect.width / 2 - containerRect.left) / zoomLevel - workspaceOffset.x;
+                    const startY = (rect.top + rect.height / 2 - containerRect.top) / zoomLevel - workspaceOffset.y;
+
+                    tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    tempLine.setAttribute('x1', startX);
+                    tempLine.setAttribute('y1', startY);
+                    tempLine.setAttribute('x2', startX);
+                    tempLine.setAttribute('y2', startY);
+                    tempLine.setAttribute('stroke', '#3b82f6');
+                    tempLine.setAttribute('stroke-width', '2');
+                    connectionsSvg.appendChild(tempLine);
+                    return;
+                }
+                
+                if (blockElement) {
+                    isDraggingBlock = true;
+                    blockElement.classList.add('selected');
+                    selectedElement = blockElement;
+                    const blockId = parseInt(blockElement.dataset.id);
+                    activeBlock = blocks.find(b => b.id === blockId);
+                    
+                    const offsetX = (e.clientX - blockElement.getBoundingClientRect().left) / zoomLevel;
+                    const offsetY = (e.clientY - blockElement.getBoundingClientRect().top) / zoomLevel;
+                    
+                    const moveHandler = (e) => {
+                        if (isDraggingBlock) {
+                            const newX = (e.clientX - workspaceContainer.getBoundingClientRect().left) / zoomLevel - offsetX - workspaceOffset.x;
+                            const newY = (e.clientY - workspaceContainer.getBoundingClientRect().top) / zoomLevel - offsetY - workspaceOffset.y;
+                            
+                            activeBlock.x = newX;
+                            activeBlock.y = newY;
+                            blockElement.style.left = `${newX}px`;
+                            blockElement.style.top = `${newY}px`;
+                            drawConnections();
+                        }
+                    };
+
+                    const upHandler = () => {
+                        isDraggingBlock = false;
+                        document.removeEventListener('mousemove', moveHandler);
+                        document.removeEventListener('mouseup', upHandler);
+                        generateCypher();
+                    };
+
+                    document.addEventListener('mousemove', moveHandler);
+                    document.addEventListener('mouseup', upHandler);
+                    return;
+                }
+
+                // Iniciar arrastre del espacio de trabajo (pan)
+                isPanning = true;
+                panStart = { x: e.clientX - workspaceOffset.x, y: e.clientY - workspaceOffset.y };
+
+            });
+
+            workspaceContainer.addEventListener('mousemove', (e) => {
+                if (isConnecting && tempLine) {
+                    const rect = workspaceContainer.getBoundingClientRect();
+                    const x2 = (e.clientX - rect.left) / zoomLevel - workspaceOffset.x;
+                    const y2 = (e.clientY - rect.top) / zoomLevel - workspaceOffset.y;
+                    tempLine.setAttribute('x2', x2);
+                    tempLine.setAttribute('y2', y2);
+                }
+                if (isPanning) {
+                    workspaceOffset.x = e.clientX - panStart.x;
+                    workspaceOffset.y = e.clientY - panStart.y;
+                    workspace.style.left = `${workspaceOffset.x}px`;
+                    workspace.style.top = `${workspaceOffset.y}px`;
+                }
+            });
+
+            workspaceContainer.addEventListener('mouseup', (e) => {
+                if (isConnecting) {
+                    const targetConnector = e.target.closest('.connector-point');
+                    if (targetConnector && parseInt(targetConnector.dataset.id) !== connectingFromId) {
+                        const toId = parseInt(targetConnector.dataset.id);
+                        
+                        // Validar si la conexión ya existe
+                        if (!connections.some(c => c.fromId === connectingFromId && c.toId === toId)) {
+                            connections.push({ fromId: connectingFromId, toId: toId });
+                        }
+                    }
+                    
+                    isConnecting = false;
+                    connectingFromId = null;
+                    if (tempLine) {
+                        tempLine.remove();
+                        tempLine = null;
+                    }
+                    drawConnections();
+                    generateCypher();
+                }
+                isPanning = false;
+            });
+            
+            // Evento para seleccionar una conexión
+            connectionsSvg.addEventListener('click', (e) => {
+                deselectAll();
+                const clickedLine = e.target;
+                if (clickedLine.tagName === 'line' && clickedLine.classList.contains('connection-line')) {
+                    clickedLine.classList.add('selected');
+                    selectedElement = clickedLine;
+                }
+            });
+
+            // Evento para eliminar con el teclado
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Delete' || e.key === 'Backspace') {
+                    if (selectedElement) {
+                        if (selectedElement.classList.contains('block')) {
+                            // Eliminar bloque
+                            const blockIdToDelete = parseInt(selectedElement.dataset.id);
+                            
+                            // Eliminar el elemento HTML del bloque
+                            selectedElement.remove();
+                            
+                            // Eliminar el bloque de la lista
+                            blocks = blocks.filter(b => b.id !== blockIdToDelete);
+        
+                            // Eliminar las conexiones asociadas
+                            connections = connections.filter(c => c.fromId !== blockIdToDelete && c.toId !== blockIdToDelete);
+                            
+                        } else if (selectedElement.classList.contains('connection-line')) {
+                            // Eliminar conexión
+                            const fromId = parseInt(selectedElement.dataset.from);
+                            const toId = parseInt(selectedElement.dataset.to);
+        
+                            connections = connections.filter(conn => conn.fromId !== fromId || conn.toId !== toId);
+                        }
+                        
+                        deselectAll();
+                        drawConnections();
+                        generateCypher();
+                        updateOverlay();
+                    }
+                }
+            });
+
+            // Evento para editar un bloque al hacer doble clic
+            workspace.addEventListener('dblclick', (e) => {
+                const blockElement = e.target.closest('.block');
+                if (blockElement) {
+                    const blockId = parseInt(blockElement.dataset.id);
+                    const block = blocks.find(b => b.id === blockId);
+                    openModal(block);
+                }
+            });
+
+            // Guardar los cambios del modal
+            saveBlockBtn.addEventListener('click', () => {
+                if (!activeBlock) return;
+                
+                switch (activeBlock.type) {
+                    case 'match':
+                        activeBlock.props.name = document.getElementById('nodeName').value;
+                        activeBlock.props.label = document.getElementById('nodeLabel').value;
+                        break;
+                    case 'where':
+                        activeBlock.props.property = document.getElementById('propName').value;
+                        activeBlock.props.value = document.getElementById('propValue').value;
+                        break;
+                    case 'return':
+                        activeBlock.props.properties = document.getElementById('returnProps').value;
+                        break;
+                    case 'test_node':
+                        activeBlock.props.properties = document.getElementById('returnProps').value;
+                        break;
+                }
+
+                // Actualizar el contenido del bloque
+                let contentHtml = '';
+                switch (activeBlock.type) {
+                    case 'match':
+                        contentHtml = `MATCH <br> (${activeBlock.props.name}:${activeBlock.props.label})`;
+                        break;
+                    case 'where':
+                        contentHtml = `WHERE <br> ${activeBlock.props.property} = '${activeBlock.props.value}'`;
+                        break;
+                    case 'return':
+                        contentHtml = `RETURN <br> ${activeBlock.props.properties}`;
+                        break;
+                    case 'test_node':
+                        contentHtml = `n:Test <br> ${activeBlock.props.properties}`;
+                        break;
+                }
+                activeBlock.element.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; height: 100%; text-align: center;">${contentHtml}</div>`;
+                
+                // Re-agregar los puntos de conexión y el botón de borrar
+                const outputPoint = document.createElement('div');
+                outputPoint.className = 'connector-point output-point';
+                outputPoint.dataset.id = activeBlock.id;
+                outputPoint.dataset.direction = 'output';
+                activeBlock.element.appendChild(outputPoint);
+
+                const inputPoint = document.createElement('div');
+                inputPoint.className = 'connector-point input-point';
+                inputPoint.dataset.id = activeBlock.id;
+                inputPoint.dataset.direction = 'input';
+                activeBlock.element.appendChild(inputPoint);
+                
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = 'X';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const blockIdToDelete = parseInt(activeBlock.element.dataset.id);
+                    
+                    activeBlock.element.remove();
+                    
+                    blocks = blocks.filter(b => b.id !== blockIdToDelete);
+                    connections = connections.filter(c => c.fromId !== blockIdToDelete && c.toId !== blockIdToDelete);
+                    
+                    drawConnections();
+                    generateCypher();
+                    updateOverlay();
+                });
+                activeBlock.element.appendChild(deleteBtn);
+
+                editModal.style.display = 'none';
+                activeBlock = null;
+                generateCypher();
+            });
+
+            // Cerrar el modal
+            closeModalBtn.addEventListener('click', () => {
+                editModal.style.display = 'none';
+                activeBlock = null;
+            });
+
+            // Lógica del zoom
+            workspaceContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                
+                const rect = workspaceContainer.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+                let newZoomLevel = zoomLevel * zoomFactor;
+
+                // Limitar el zoom a un rango razonable
+                newZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoomLevel));
+
+                // Calcular el nuevo origen de la transformación para hacer zoom al punto del ratón
+                const oldX = mouseX / zoomLevel;
+                const oldY = mouseY / zoomLevel;
+                const newX = mouseX / newZoomLevel;
+                const newY = mouseY / newZoomLevel;
+                
+                workspaceOffset.x += (oldX - newX) * newZoomLevel;
+                workspaceOffset.y += (oldY - newY) * newZoomLevel;
+
+                workspace.style.left = `${workspaceOffset.x}px`;
+                workspace.style.top = `${workspaceOffset.y}px`;
+                workspace.style.transform = `scale(${newZoomLevel})`;
+                
+                zoomLevel = newZoomLevel;
+                drawConnections();
+            });
+        });
+    </script>
+</body>
+</html>

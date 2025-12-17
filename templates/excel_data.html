@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Contenido del archivo {{ name_file | safe}}</title>
+</head>
+<style>
+    table {
+        border-collapse: collapse;
+        table-layout: auto;
+    }
+    td {
+        font-size: 10px;
+    }
+    #mygraph{
+        width: 100%;
+        height: 500px;
+        border: 2px solid black;
+    }
+</style>
+
+<body>
+    <div class="container">
+        <h1>Datos del archivo</h1>
+        <div style="overflow-x: auto;">
+            {{ data_table | safe }}
+        </div>
+        <h1>Grafo construido</h1>
+        <script
+          type="text/javascript"
+          src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
+        ></script>
+        <div id="mygraph">
+        </div>
+        <script type="text/javascript">
+          // create an array with nodes
+          var nodes = new vis.DataSet([
+            { id: 1, label: "Node 1" },
+            { id: 2, label: "Node 2" },
+            { id: 3, label: "Node 3" },
+            { id: 4, label: "Node 4" },
+            { id: 5, label: "Node 5" },
+          ]);
+
+          // create an array with edges
+          var edges = new vis.DataSet([
+            { from: 1, to: 3 },
+            { from: 1, to: 2 },
+            { from: 2, to: 4 },
+            { from: 2, to: 5 },
+            { from: 3, to: 3 },
+          ]);
+
+          // create a network
+          var container = document.getElementById("mygraph");
+          var data = {
+            nodes: nodes,
+            edges: edges,
+          };
+          var options = {};
+          var network = new vis.Network(container, data, options);
+        </script>
+    </div>
+</body>
+
+</html>

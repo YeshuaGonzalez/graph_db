@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Visualización de Excel - Reporte Gerencial</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Panel de Control de Archivos</h1>
+
+        <div class="actions-container">
+            <form class ="center-form" method=post enctype=multipart/form-data>
+                <input type="file" name="file" id="file1">
+                <input type=submit value="Subir Archivo">
+            </form>
+            <form action="/searching">
+                <input type="submit" value="Búsqueda por Comandos">
+            </form>
+            <form action="/filtering">
+                <input type="submit" value="Búsqueda por Filtros">
+            </form>
+        </div>
+
+        <b>Archivos disponibles en el servidor:</b>
+        <br>
+        
+        {{ files_table | safe }}
+    </div>
+    <script>
+      function click_file(filename) {
+          fetch('/clic_file', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ param1: filename })
+          })
+          .then(response => {
+              if (response.ok) {
+                  window.location.href = '/clic_file?file=' + filename;
+              } else {
+                  console.error('Error fetching data');
+              }
+          });
+      }
+    </script> 
+</body>
+</html>
