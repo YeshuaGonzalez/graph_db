@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Contenido del archivo {{ name_file | safe}}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
+</head>
+<style>
+    th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+</style>
+<body>
+    <div class="container">
+        <h1>Datos del archivo</h1>
+        <div
+            style= "
+            overflow-x: 
+            auto; max-height: 350px; overflow-y
+            "
+        >
+            {{ data_table | safe }}
+        </div>
+        <h1>Grafo construido</h1>
+        <script
+          type="text/javascript"
+          src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
+        ></script>
+        <div id="mygraph">
+        </div>
+        <div id="nodeInfo">
+            <h3>Node Information</h3>
+            <p>Click on a node to see its properties here.</p>
+        </div>
+        <script type="text/javascript">
+            // create an array with nodes
+            var nodes = new vis.DataSet({{ nodes_data | safe }});
+
+            // create an array with edges
+            var edges = new vis.DataSet({{ edges_data | safe }});
+
+            // create a network
+            var container = document.getElementById("mygraph");
+            var data = {
+                nodes: nodes,
+                edges: edges,
+            };
+            var options = {
+                groups: {
+                    test:{
+                        shape: 'circle',
+                        color: {
+                            border: 'transparent', 
+                            background: '#1565c0', //Azul principal
+                            highlight: {
+                              border: 'transparent',
+                              background: '#1e88e5'  //Azul claro
+                            }
+                        },
+                        font: {size:12, color:'white'},
+                    },
+                    spec:{
+                        shape: 'box',
+                        color: {
+                            border: 'transparent', 
+                            background: '#008b39', //verde tenazit
+                            highlight: {
+                                border: 'transparent',
+                                background: '#80c71f' //lime
+                            }
+                        },
+                        font: {size:12, color:'white'}
+                    },
+                    geo:{
+                        shape: 'bigEllipse',
+                        color: {
+                            border: 'transparent', 
+                            background: '#f9801d', //orange
+                            highlight: {
+                                border: 'transparent',
+                                background: '#ffd83d' //yellow
+                            }
+                        },
+                        font: {size:10, color:'white'}
+                    }
+                },
+                edges:{
+                    color: {
+                      color: '#0d47a1', // Default edge color
+                      highlight: '#1565c0', // Default highlight color
+                      hover: '#0d47a1', // Default hover color
+                      inherit: false // Disable inheritance from node colors
+                    }
+                }
+            };
+            var network = new vis.Network(container, data, options);
+
+            network.on("click", function (params) {
+                var nodeInfoDiv = document.getElementById('nodeInfo');
+                if (params.nodes.length > 0) {
+                    var nodeId = params.nodes[0];
+                    var clickedNode = nodes.get(nodeId);
+                    keys = Object.keys(clickedNode); //array of the keys
+                    //console.log('Keys >> ', keys);
+                    //console.log('Keys lenght >> ', keys.length);
+                    var html = "<h3>Node Information: " + clickedNode.label + "</h3>";
+                    if (keys) {
+                        for (var ind in keys) {
+                            var key = keys[ind];
+                            if (key!="id" & key!="type" & key!="label"){
+                                html += "<p><strong>" + key + ":</strong> " + clickedNode[key] + "</p>";
+                            }
+                        }
+                    } else {
+                        html += "<p>No specific properties defined for this node.</p>" ;
+                    }
+                    nodeInfoDiv.innerHTML = html;
+                } else {
+                    nodeInfoDiv.innerHTML = "<h3>Node Information</h3><p>Click on a node to see its properties here.</p>";
+                }
+            });
+
+        </script>
+    </div>
+</body>
+
+</html>

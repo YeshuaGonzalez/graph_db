@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Visualización de Excel</title>
+</head>
+<style>
+    table {
+      border-collapse: collapse;
+      border: 1px solid blue; /* 2px width, solid style, blue color */
+    }
+    th, td {
+        border: 1px solid black; /* Example: 1px solid black border */
+    }
+    th.bold-text {
+      font-weight: bold;
+    }
+</style>
+<body>
+    <div class="container">
+        <h1>Archivos registrados</h1>
+    <form method=post enctype=multipart/form-data>
+      <input type=file name=file>
+      <input type=submit value=Upload>
+    </form>
+    <form action="/searching">
+      <input type="submit" value="Busqueda por comandos">
+    </form>
+    <form action="/filtering">
+      <input type="submit" value="Busqueda por filtros">
+    </form>
+    <!--
+    <br>
+    <button onclick = "click_search()">Busqueda grafo</button>
+    -->
+    <br>
+    <br>
+    <b>Archivos disponibles en el servidor:</b>
+    <br>
+    {{ files_table | safe }}
+    </div>
+</body>
+</html>
+
+<script>
+  function click_file(filename) {
+      fetch('/clic_file', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ param1: filename})
+      })
+      //.then(response => response.text())
+      .then(response => {
+          if (response.ok) {
+              window.location.href = '/clic_file?file=' + filename;
+          } else {
+              console.error('Error fetching data');
+          }
+      });
+      //.then(data => console.log(data));
+  }
+  /*function click_search(){
+    window.location.href = 
+  }*/
+</script> 

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Busqueda en grafo general</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Busqueda en grafo general</h1>
+    <form id="cypherform" method="POST">
+      <label for="fquery" style="width: 10%;">Cypher query:</label> <!--MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 25;-->
+      <input type="text" style="width: 80%;" id="txtquery" name="txtquery" value="MATCH p=()-[]->() RETURN p LIMIT 25;">
+      <button type=button onclick="clic_search()" style="width: 10%;">Buscar</button>
+    </form>
+
+    <form id="filterform" method="POST">
+      <fieldset>
+        <legend>Selecci&oacuten de tipo de nodos :</legend>
+        <div>
+          <input type="checkbox" id="spec_in" name="node_options" value="spec" onchange="checkNodes()">
+          <label for="spec">Especificaci&oacuten</label>
+        </div>
+        <div>
+          <input type="checkbox" id="test_in" name="node_options" value="test" onchange="checkNodes()">
+          <label for="test">Prueba</label>
+        </div>
+        <div>
+          <input type="checkbox" id="mat_in" name="node_options" value="mat" onchange="checkNodes()">
+          <label for="mat">Material</label>
+        </div>
+      </fieldset>
+    </form>
+    <div id="proper_spec">
+    </div>
+    <div id="proper_test">
+    </div>
+    <div id="proper_mat">
+    </div>
+    <!--<button onclick = "clic_search()" style="width: 10%">Buscar</button>-->
+    <br>
+    <script
+      type="text/javascript"
+      src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"
+    ></script>
+    <div id="mygraph">
+    </div>
+    <div id="nodeInfo">
+        <h3>Node Information</h3>
+        <p>Click on a node to see its properties here.</p>
+    </div>
+  <script type="text/javascript">
+    function clic_search() {
+
+      const allCheckbox = document.querySelectorAll('input[type="checkbox"]');
+      console.log("Todos los check boxes", typeof allCheckbox)
+      let query_tmp = "MATCH p=(n1)-[l1]-(n2) WHERE "
+      let first = true
+      allCheckbox.forEach(checkbox => {
+        console.log(`ID: ${checkbox.id}, Nombre: ${checkbox.name}, Valor: ${checkbox.value}, Está marcado: ${checkbox.checked}`);
+        //const rad_obj = document.getElementById('op_and_' + checkbox.id.slice(10));
+        //op_value = op_obj.value
+        //console.log("OPTION: " + 'op_and_' + checkbox.id.slice(10) +" value: " + rad_obj.checked)
+
+        if (checkbox.checked && checkbox.id!="spec_in" && checkbox.id!="test_in" && checkbox.id!="mat_in" && first == false){
+          const value_obj = document.getElementById('value_' + checkbox.id.slice(10));
+          const rad_and = document.getElementById('op_and_' + checkbox.id.slice(10));
+          const rad_or = document.getElementById('op_or_' + checkbox.id.slice(10));
+          value_prop = value_obj.value
+          bool_str = ""
+          if (rad_and.checked){
+            bool_str = "AND"
+          }
+          if (rad_or.checked){
+            bool_str = "OR"
+          }
+          query_tmp = query_tmp + " " + bool_str + " n1." + checkbox.id.slice(10) + "='" + value_prop + "' "
+        }
+
+        if (checkbox.checked && checkbox.id!="spec_in" && checkbox.id!="test_in" && checkbox.id!="mat_in" && first == true){
+          const value_obj = document.getElementById('value_' + checkbox.id.slice(10));
+          console.log(checkbox.id)
+          value_prop = value_obj.value
+          query_tmp = query_tmp + "n1." + checkbox.id.slice(10) + "='" + value_prop + "' "
+          first = false
+        }
+
+      });
+      query_tmp = query_tmp + "RETURN p;"
+      console.log("QUERY_TMP >> ", query_tmp)
+
+      const textCypher = document.getElementById('txtquery');
+      textCypher.value = query_tmp
+      const cypherQuery = {
+        cypher_query : query_tmp
+      };
+      //console.log('Query a enviar: ' + cypherQuery.cypher_query);
+      fetch('/filtering', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(cypherQuery)
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json(); // Correctly returns the promise from response.json()
+      })
+      .then(data => {
+        data_json = JSON.parse(data)
+        //console.log("DISPLAY ANSWER >> ", typeof data);
+        //console.log("DISPLAY ANSWER >> ", data_json.nodes);
+        // Process your data here, for example:
+        // displayData(data);
+
+        var nodes = new vis.DataSet(data_json.nodes);
+        var edges = new vis.DataSet(data_json.edges);
+        var container = document.getElementById("mygraph");
+        var data_graph = {
+            nodes: nodes,
+            edges: edges,
+        };
+
+        var options = {
+            groups: {
+                Test:{
+                    shape: 'circle',
+                    color: {
+                        border: 'transparent', 
+                        background: '#1565c0', //Azul principal
+                        highlight: {
+                          border: 'transparent',
+                          background: '#1e88e5'  //Azul claro
+                        }
+                    },
+                    font: {size:12, color:'white'},
+                },
+                Spec:{
+                    shape: 'box',
+                    color: {
+                        border: 'transparent', 
+                        background: '#008b39', //verde tenazit
+                        highlight: {
+                            border: 'transparent',
+                            background: '#80c71f' //lime
+                        }
+                    },
+                    font: {size:12, color:'white'}
+                },
+                Mat:{
+                    shape: 'bigEllipse',
+                    color: {
+                        border: 'transparent', 
+                        background: '#f9801d', //orange
+                        highlight: {
+                            border: 'transparent',
+                            background: '#ffd83d' //yellow
+                        }
+                    },
+                    font: {size:10, color:'white'}
+                }
+            },
+            edges:{
+                color: {
+                  color: '#0d47a1', // Default edge color
+                  highlight: '#1565c0', // Default highlight color
+                  hover: '#0d47a1', // Default hover color
+                  inherit: false // Disable inheritance from node colors
+                }
+            }
+        };
+        var network = new vis.Network(container, data_graph, options);
+        network.on("click", function (params) {
+            var nodeInfoDiv = document.getElementById('nodeInfo');
+            //console.log("Número de nodes: ", params.nodes.length, " Número de edges: ", params.edges.length)
+            switch(true){
+                case (params.edges.length > 0 && params.nodes.length == 0 ):
+                    var edgeId = params.edges[0];
+                    var clickedEdge = edges.get(edgeId);
+                    keys = Object.keys(clickedEdge); //array
+                    var html = "<h3>Edge Information:</h3>";
+                    if (keys) {
+                        for (var ind in keys) {
+                            var key = keys[ind];
+                            if (key!="from" && key!="to" && key!="label" && key!="id"){
+                                html += "<p><strong>" + key + ":</strong> " + clickedEdge[key] + "</p>";
+                            }
+                        }
+                    } else {
+                        html += "<p>No specific properties defined for this edge.</p>" ;
+                    }
+                   nodeInfoDiv.innerHTML = html;
+                   break;
+                case (params.nodes.length > 0):
+                    var nodeId = params.nodes[0];
+                    var clickedNode = nodes.get(nodeId);
+                    keys = Object.keys(clickedNode); //array
+                    var html = "<h3>Node Information: " + clickedNode.label + "</h3>";
+                    if (keys) {
+                        for (var ind in keys) {
+                            var key = keys[ind];
+                            if (key!="id" && key!="type" && key!="label"){
+                                html += "<p><strong>" + key + ":</strong> " + clickedNode[key] + "</p>";
+                            }
+                        }
+                    } else {
+                        html += "<p>No specific properties defined for this node.</p>" ;
+                    }
+                    nodeInfoDiv.innerHTML = html;
+                    break;
+                default:
+                   nodeInfoDiv.innerHTML = "<h3>Node/Edge Information</h3><p>Click on a node or edge to see its properties here.</p>"; 
+            }
+            /*if (params.nodes.length > 0) {
+                var nodeId = params.nodes[0];
+                var clickedNode = nodes.get(nodeId);
+                keys = Object.keys(clickedNode); //array of the keys
+                //console.log('Keys >> ', keys);
+                //console.log('Keys lenght >> ', keys.length);
+                var html = "<h3>Node Information: " + clickedNode.label + "</h3>";
+                if (keys) {
+                    for (var ind in keys) {
+                        var key = keys[ind];
+                        if (key!="id" & key!="type" & key!="label"){
+                            html += "<p><strong>" + key + ":</strong> " + clickedNode[key] + "</p>";
+                        }
+                    }
+                } else {
+                    html += "<p>No specific properties defined for this node.</p>" ;
+                }
+                nodeInfoDiv.innerHTML = html;
+            } else {
+                nodeInfoDiv.innerHTML = "<h3>Node Information</h3><p>Click on a node to see its properties here.</p>";
+            }*/
+        });
+        console.log("FINISH ...")
+      })
+      .catch(error => {
+        console.error('C4tch err0r:', error);
+      })
+    }
+  </script>
+  <script type="text/javascript">
+    function checkNodes() {
+      let obj_chckbx = {
+        spec: document.getElementById("spec_in"),
+        test: document.getElementById("test_in"),
+        mat: document.getElementById("mat_in")
+      };
+
+      let obj_conts = {
+        spec: document.getElementById('proper_spec'),
+        test: document.getElementById('proper_test'),
+        mat: document.getElementById('proper_mat')
+      };
+      const keys_conts = Object.keys(obj_conts);
+      const keys_chck = Object.keys(obj_chckbx);
+
+      for (let key in obj_chckbx){
+        //console.log("La caja de selección de: ", key, " está seleccionada: ", obj_chckbx[key].checked)
+
+        if (obj_chckbx[key].checked){
+          props_query = "MATCH (n:" + key.charAt(0).toUpperCase() + key.slice(1) + ") UNWIND keys(n) AS property RETURN DISTINCT property"
+          
+          const cypherQuery = {
+            props_command : props_query
+          }
+
+          fetch('/props', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(cypherQuery)
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json(); // Correctly returns the promise from response.json()
+          })
+          .then(data => {
+            data_json = JSON.parse(data)
+            prop_arr = data_json.props
+            //console.log("DISPLAY ANSWER >> ", typeof data);
+            //console.log(prop_arr)
+            const form_tmp = document.createElement('form');
+            const br_element = document.createElement('br');
+            const field_set = document.createElement('fieldset')
+
+            form_tmp.appendChild(field_set);
+
+            const legend = document.createElement('legend');
+            legend.textContent = 'Propiedades del nodo tipo: ' + key.charAt(0).toUpperCase() + key.slice(1);
+            field_set.appendChild(legend);
+
+            for (i in prop_arr){
+              //CheckBox
+              const checkbox_tmp = document.createElement('input');
+              checkbox_tmp.type = 'checkbox';
+              checkbox_tmp.id = 'check_box_' + prop_arr[i]; // Assign an ID
+              checkbox_tmp.name = 'check_box_' + prop_arr[i]; // Assign a name for form submission
+
+              //Label
+              const label_tmp = document.createElement('label');
+              label_tmp.textContent = '  ' + prop_arr[i] + ':';
+              //TextBox
+              const input_tmp = document.createElement('input');
+              input_tmp.setAttribute('name', prop_arr[i]);
+              input_tmp.id = 'value_' + prop_arr[i]; // Assign an ID
+              input_tmp.classList.add('input-specs');
+              
+              //Radio Container
+              const radio_container = document.createElement("div");
+              //radio_container.style.display = 'inline-block';
+              //radio_container.style.border = '1px solid black';
+              radio_container.classList.add('radio-inline');
+              radio_container.id = 'op_'+ prop_arr[i];
+
+              const opciones = [
+                { id: 'op_and_'+prop_arr[i], valor: 'AND', texto: 'AND' },
+                { id: 'op_or_'+prop_arr[i], valor: 'OR', texto: 'OR' }
+              ];
+
+              // Iterar sobre las opciones y crear los elementos
+              opciones.forEach(opcion => {
+                // 1. Crear el elemento <input type="radio">
+                const inputRadio = document.createElement('input');
+                inputRadio.type = 'radio';
+                inputRadio.id = opcion.id;
+                inputRadio.name = 'decision_' + prop_arr[i]; // El 'name' debe ser el mismo para agruparlos
+                inputRadio.value = opcion.valor;
+
+                // 2. Crear el elemento <label>
+                const label = document.createElement('label');
+                label.htmlFor = opcion.id; // Conectar el label con el input
+                label.textContent = opcion.texto;
+
+                // 4. Agregar los elementos al contenedor
+                radio_container.appendChild(inputRadio);
+                radio_container.appendChild(label);
+              });
+              field_set.appendChild(checkbox_tmp);
+              field_set.appendChild(radio_container);
+              field_set.appendChild(label_tmp);
+              field_set.appendChild(input_tmp);
+              field_set.appendChild(document.createElement('br'));
+            }
+            obj_conts[key].innerHTML = '';
+            obj_conts[key].appendChild(form_tmp);
+          })
+          .catch(error => {
+            console.error('C4tch err0r:', error);
+            obj_conts[key].innerHTML = '';
+          })
+        } else {
+          obj_conts[key].innerHTML = '';
+        }
+      }
+    }
+  </script>
+</body>
+</html>
+

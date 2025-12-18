@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Busqueda en grafo general</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Busqueda en grafo general</h1>
+    <form id="cypherform" method="POST">
+      <label for="fquery" style="width: 10%;">Cypher query:</label> <!--MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 25;-->
+      <input type="text" style="width: 80%;" id="txtquery" name="txtquery" value="MATCH p=()-[]->() RETURN p LIMIT 25;">
+      <button type=button onclick="clic_search()" style="width: 10%;">Buscar</button>
+    </form>
+    <!--<button onclick = "clic_search()" style="width: 10%">Buscar</button>-->
+    <br>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <div id="mygraph">
+    </div>
+    <div id="nodeInfo">
+        <h3>Node Information</h3>
+        <p>Click on a node to see its properties here.</p>
+    </div>
+
+  <script type="text/javascript">
+    function clic_search() {
+      const textCypher = document.getElementById('txtquery');
+      const cypherQuery = {
+        cypher_query : textCypher.value
+      };
+      console.log('Query a enviar: ' + cypherQuery.cypher_query);
+      fetch('/searching', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(cypherQuery)
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json(); // Correctly returns the promise from response.json()
+      })
+      .then(data => {
+        data_json = JSON.parse(data)
+        //console.log("DISPLAY ANSWER >> ", typeof data);
+        //console.log("DISPLAY ANSWER >> ", data_json.nodes);
+        // Process your data here, for example:
+        // displayData(data);
+
+        var nodes = new vis.DataSet(data_json.nodes);
+        var edges = new vis.DataSet(data_json.edges);
+        var container = document.getElementById("mygraph");
+        var data_graph = {
+            nodes: nodes,
+            edges: edges,
+        };
+
+        var options = {
+            groups: {
+                Test:{
+                    shape: 'circle',
+                    color: {
+                        border: 'transparent', 
+                        background: '#1565c0', //Azul principal
+                        highlight: {
+                          border: 'transparent',
+                          background: '#1e88e5'  //Azul claro
+                        }
+                    },
+                    font: {size:12, color:'white'},
+                },
+                Spec:{
+                    shape: 'box',
+                    color: {
+                        border: 'transparent', 
+                        background: '#008b39', //verde tenazit
+                        highlight: {
+                            border: 'transparent',
+                            background: '#80c71f' //lime
+                        }
+                    },
+                    font: {size:12, color:'white'}
+                },
+                Mat:{
+                    shape: 'bigEllipse',
+                    color: {
+                        border: 'transparent', 
+                        background: '#f9801d', //orange
+                        highlight: {
+                            border: 'transparent',
+                            background: '#ffd83d' //yellow
+                        }
+                    },
+                    font: {size:10, color:'white'}
+                }
+            },
+            edges:{
+                color: {
+                  color: '#0d47a1', // Default edge color
+                  highlight: '#1565c0', // Default highlight color
+                  hover: '#0d47a1', // Default hover color
+                  inherit: false // Disable inheritance from node colors
+                }
+            }
+        };
+        var network = new vis.Network(container, data_graph, options);
+
+        network.on("click", function (params) {
+            var nodeInfoDiv = document.getElementById('nodeInfo');
+            //console.log("Número de nodes: ", params.nodes.length, " Número de edges: ", params.edges.length)
+            switch(true){
+                case (params.edges.length > 0 && params.nodes.length == 0 ):
+                    var edgeId = params.edges[0];
+                    var clickedEdge = edges.get(edgeId);
+                    keys = Object.keys(clickedEdge); //array
+                    var html = "<h3>Edge Information:</h3>";
+                    if (keys) {
+                        for (var ind in keys) {
+                            var key = keys[ind];
+                            if (key!="from" && key!="to" && key!="label" && key!="id"){
+                                html += "<p><strong>" + key + ":</strong> " + clickedEdge[key] + "</p>";
+                            }
+                        }
+                    } else {
+                        html += "<p>No specific properties defined for this edge.</p>" ;
+                    }
+                   nodeInfoDiv.innerHTML = html;
+                   break;
+                case (params.nodes.length > 0):
+                    var nodeId = params.nodes[0];
+                    var clickedNode = nodes.get(nodeId);
+                    keys = Object.keys(clickedNode); //array
+                    var html = "<h3>Node Information: " + clickedNode.label + "</h3>";
+                    if (keys) {
+                        for (var ind in keys) {
+                            var key = keys[ind];
+                            if (key!="id" && key!="type" && key!="label"){
+                                html += "<p><strong>" + key + ":</strong> " + clickedNode[key] + "</p>";
+                            }
+                        }
+                    } else {
+                        html += "<p>No specific properties defined for this node.</p>" ;
+                    }
+                    nodeInfoDiv.innerHTML = html;
+                    break;
+                default:
+                   nodeInfoDiv.innerHTML = "<h3>Node/Edge Information</h3><p>Click on a node or edge to see its properties here.</p>"; 
+            }
+        });
+        console.log("FINISH ...")
+      })
+      .catch(error => {
+        console.error('C4tch err0r:', error);
+      })
+    }
+  </script>
+</body>
+</html>
+
